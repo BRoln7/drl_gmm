@@ -1,0 +1,17 @@
+<launch>
+  <arg name="model_file"   default="/home/lab423/drl_vo_runs/best_model.zip"/>
+  <!-- <arg name="model_file"   default="/home/lab423/drl_dz_runs3/best_model.zip"/> -->
+
+  <include file="$(find turtlebot_teleop)/launch/includes/velocity_smoother.launch.xml"/>
+
+  <!-- DRL-VO publisher -->
+  <node name="drl_vo_cmd" pkg="drl_vo_nav" type="drl_vo_inference.py" output="screen">
+    <param name="model_file" value="$(arg model_file)" type="string"/>
+  </node>
+
+  <!-- Mix cmd vel publisher -->
+  <node name="mix_cmd_vel" pkg="drl_vo_nav" type="cmd_vel_pub.py" output="screen" >
+    <remap from="cmd_vel" to="teleop_velocity_smoother/raw_cmd_vel"/>
+  </node>  
+
+</launch>
