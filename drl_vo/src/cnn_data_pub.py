@@ -10,9 +10,11 @@
 #------------------------------------------------------------------------------
 import numpy as np
 import rospy
+import tf
 from cnn_msgs.msg import CNN_data
 # custom define messages:
 from geometry_msgs.msg import Point, PoseStamped, Twist, TwistStamped
+from tf.transformations import quaternion_matrix, translation_matrix, concatenate_matrices
 from pedsim_msgs.msg import TrackedPerson, TrackedPersons
 from sensor_msgs.msg import LaserScan
 
@@ -37,12 +39,15 @@ class CnnData:
         self.scan_all_tmp = np.zeros(1080)
 
         # initialize ROS objects
+        self.listener = tf.TransformListener()
         self.ped_sub = rospy.Subscriber("/track_ped", TrackedPersons, self.ped_callback)
         self.scan_sub = rospy.Subscriber("/scan", LaserScan, self.scan_callback)
+        self.laser_pub = rospy.Publisher("/laser", LaserScan, queue_size=1, latch=False)
+        # self.goal_sub = rospy.Subscriber("/cnn_goal", Point, self.goal_callback)
         self.goal_sub = rospy.Subscriber("/cnn_goal", Point, self.goal_callback)
         self.vel_sub = rospy.Subscriber("/mobile_base/commands/velocity", Twist, self.vel_callback)
         self.cnn_data_pub = rospy.Publisher('/cnn_data', CNN_data, queue_size=1, latch=False)
-
+      
         # timer:
         self.rate = 20  # 20 Hz velocity controller
         self.ts_cnt = 0  # maximum 10 timesteps
@@ -78,6 +83,37 @@ class CnnData:
     # Callback function for the scan measurement subscriber
     def scan_callback(self, laserScan_msg):
         # get the laser scan data:
+        try:
+          (trans, rot) = self.listener.lookupTransform('base_footprint', 'hokuyo_link', rospy.Time(0))
+          # Construct transformation matrix
+          trans_matrix = translation_matrix(trans)
+          rot_matrix = quaternion_matrix(rot)
+          transformation_matrix = concatenate_matrices(trans_matrix, rot_matrix)
+          # Transform each point in the laser scan
+          transformed_ranges = []
+          for range_val, angle in zip(laserScan_msg.ranges, np.arange(laserScan_msg.angle_min,\
+            laserScan_msg.angle_max, laserScan_msg.angle_increment)):
+              if np.isinf(range_val):
+                  transformed_ranges.append(range_val)
+              else:
+                  point = [range_val * np.cos(angle), range_val * np.sin(angle), 0, 1.0]  # Append 1 to make it homogeneous
+                  transformed_point = np.dot(transformation_matrix, point)[:3]  # Apply transformation
+                  transformed_ranges.append(np.linalg.norm(transformed_point))
+
+          transformed_scan_msg = LaserScan()
+          transformed_scan_msg.header.frame_id = "base_footprint"
+          transformed_scan_msg.header.stamp = rospy.Time.now()
+          transformed_scan_msg.angle_increment = laserScan_msg.angle_increment
+          transformed_scan_msg.time_increment = laserScan_msg.time_increment
+          transformed_scan_msg.scan_time = laserScan_msg.scan_time
+          transformed_scan_msg.angle_min = laserScan_msg.angle_min + (1/3)*laserScan_msg.angle_max
+          transformed_scan_msg.angle_max = laserScan_msg.angle_max - (1/3)*laserScan_msg.angle_max
+          transformed_scan_msg.ranges = transformed_ranges[180:900]
+          self.laser_pub.publish(transformed_scan_msg)
+
+        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+            rospy.logwarn("Failed to lookup transform or transform laser scan.")
+        
         self.scan_tmp = np.zeros(720)
         self.scan_all_tmp = np.zeros(1080)
         scan_data = np.array(laserScan_msg.ranges, dtype=np.float32)
@@ -85,6 +121,7 @@ class CnnData:
         scan_data[np.isinf(scan_data)] = 0.
         self.scan_tmp = scan_data[180:900]
         self.scan_all_tmp = scan_data
+
 
     # Callback function for the current goal subscriber
     def goal_callback(self, goal_msg):

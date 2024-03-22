@@ -1,21 +1,23 @@
 <launch>
-  <arg name="scene_file" default="$(find pedsim_simulator)/scenarios/eng_hall.xml"/>
+  <!-- <arg name="scene_file" default="$(find pedsim_simulator)/scenarios/eng_hall.xml"/> -->
   <!-- <arg name="scene_file" default="$(find pedsim_simulator)/scenarios/autolab/autolab_25.xml"/> -->
-  <!-- <arg name="scene_file" default="$(find pedsim_simulator)/scenarios/cumberland/cumberland_25.xml"/> -->
-  <arg name="world_name" default="$(find pedsim_gazebo_plugin)/worlds/eng_hall.world"/>
+  <arg name="scene_file" default="$(find pedsim_simulator)/scenarios/cumberland/cumberland_25.xml"/>
+  <!-- <arg name="world_name" default="$(find pedsim_gazebo_plugin)/worlds/eng_hall.world"/> -->
   <!-- <arg name="world_name" default="$(find pedsim_gazebo_plugin)/worlds/autolab.world"/> -->
-  <!-- <arg name="world_name" default="$(find pedsim_gazebo_plugin)/worlds/cumberland.world"/> -->
+  <arg name="world_name" default="$(find pedsim_gazebo_plugin)/worlds/cumberland.world"/>
   <arg name="gui" default="true" doc="Bring up the Gazebo graphical interface"/>
-  <arg name="pose_initial_x" default="1.0"/> 
-  <arg name="pose_initial_y" default="1.0"/>
-  <arg name="map_file" default="$(find robot_gazebo)/maps/gazebo_eng_lobby/gazebo_eng_lobby.yaml"/>
+  <arg name="pose_initial_x" default="4.0"/> 
+  <arg name="pose_initial_y" default="8.0"/>
+  <!-- <arg name="map_file" default="$(find robot_gazebo)/maps/gazebo_eng_lobby/gazebo_eng_lobby.yaml"/> -->
   <!-- <arg name="map_file" default="$(find robot_gazebo)/maps/gazebo_autolab/gazebo_autolab.yaml"/> -->
-  <!-- <arg name="map_file" default="$(find robot_gazebo)/maps/gazebo_cumberland/gazebo_cumberland.yaml"/> -->
+  <arg name="map_file" default="$(find robot_gazebo)/maps/gazebo_cumberland/gazebo_cumberland.yaml"/>
+  <!-- <arg name="initial_pose_x" default="1.0"/>
+  <arg name="initial_pose_y" default="0.0"/> -->
   <arg name="initial_pose_x" default="1.0"/>
   <arg name="initial_pose_y" default="0.0"/>
   <!-- <arg name="initial_pose_y" default="1.0"/> -->
   <arg name="initial_pose_a" default="0.13"/>
-  <arg name="model_file" default="/home/lab423/drldz_runs6/best_model.zip"/>
+  <arg name="model_file" default="/home/lab423/drl_GMM_runs4/best_model.zip"/>
   <!-- Output -->
   <arg name="output" default="log"/>
   <arg name="enable_opencv" default="true"/>

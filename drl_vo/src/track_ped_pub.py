@@ -11,7 +11,7 @@
 import rospy
 import tf
 from geometry_msgs.msg import TwistStamped, Twist, PoseStamped, Pose, Point, Vector3
-from pedsim_msgs.msg  import TrackedPersons, TrackedPerson, TrackedGroups
+from pedsim_msgs.msg  import TrackedPersons, TrackedPerson, TrackedGroups, TrackedGroup
 from gazebo_msgs.srv import GetModelState
 from ford_msgs.msg import Clusters
 from sensor_msgs.msg import LaserScan
@@ -22,8 +22,10 @@ class TrackPed:
     def __init__(self):
         # Initialize ROS objects
         self.ped_sub = rospy.Subscriber('/pedsim_visualizer/tracked_persons', TrackedPersons, self.ped_callback)
+        self.group_sub = rospy.Subscriber('/pedsim_visualizer/tracked_groups', TrackedGroups, self.group_callback)
         self.get_state_service = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
         self.track_ped_pub = rospy.Publisher('/track_ped', TrackedPersons, queue_size=10)
+        self.track_group_pub = rospy.Publisher('/track_group', TrackedGroups, queue_size=10)
         #for cadrl
         self.cadrl_ped_pub = rospy.Publisher('/cluster/output/clusters', Clusters, queue_size=10)
         
@@ -126,7 +128,50 @@ class TrackPed:
 
     #def lidar_callback(self, lidar_msgs):
         
-        
+
+    def group_callback(self, group_msg):
+        groups = group_msg
+                       
+        # get robot states:
+        robot = self.get_robot_states()
+
+        if(robot is not None):
+            # get robot poses and velocities: 
+            robot_pos = np.zeros(3)
+            robot_pos[:2] = np.array([robot.pose.position.x, robot.pose.position.y])
+            robot_quaternion = (
+                                robot.pose.orientation.x,
+                                robot.pose.orientation.y,
+                                robot.pose.orientation.z,
+                                robot.pose.orientation.w)
+            (_,_, robot_pos[2]) = tf.transformations.euler_from_quaternion(robot_quaternion)
+            robot_vel = np.array([robot.twist.linear.x, robot.twist.linear.y])
+            #print(robot_vel)
+            # homogeneous transformation matrix: map_T_robot
+            map_R_robot = np.array([[np.cos(robot_pos[2]), -np.sin(robot_pos[2])],
+                                    [np.sin(robot_pos[2]),  np.cos(robot_pos[2])],
+                                ])
+            map_T_robot = np.array([[np.cos(robot_pos[2]), -np.sin(robot_pos[2]), robot_pos[0]],
+                                    [np.sin(robot_pos[2]),  np.cos(robot_pos[2]), robot_pos[1]],
+                                    [0, 0, 1]])
+            # robot_T_map = (map_T_robot)^(-1)
+            robot_R_map = np.linalg.inv(map_R_robot)
+            robot_T_map = np.linalg.inv(map_T_robot)
+
+            # get pedestrian poses and velocities:
+            tracked_peds = TrackedPersons()
+            #tracked_peds.header = peds.header
+            tracked_peds.header.frame_id = 'base_footprint'
+            tracked_peds.header.stamp = rospy.Time.now()
+            label = 0
+            for group in groups.groups:
+                center = np.array([group.centerOfGravity.pose.position.x, group.centerOfGravity.pose.position.y, 1])
+                center_in_robot = np.matmul(robot_T_map, center.T)
+                group.centerOfGravity.pose.position.x = center_in_robot[0]
+                group.centerOfGravity.pose.position.y = center_in_robot[1]
+
+            self.track_group_pub.publish(groups)
+
  
 if __name__ == '__main__':
     try:

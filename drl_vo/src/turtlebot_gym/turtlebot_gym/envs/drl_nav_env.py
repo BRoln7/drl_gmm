@@ -24,7 +24,7 @@ from gym import spaces
 #from .gym_gazebo_env import GymGazeboEnv
 from .gazebo_connection import GazeboConnection
 from std_msgs.msg import Float64, Empty, Bool
-from sensor_msgs.msg import LaserScan
+from sensor_msgs.msg import LaserScan, PointCloud, PointField
 from gazebo_msgs.msg import ModelStates, ModelState
 from gazebo_msgs.srv import GetModelState, SetModelState
 from nav_msgs.msg import Odometry, OccupancyGrid, Path
@@ -32,7 +32,7 @@ from geometry_msgs.msg import Pose, Twist, Point, PoseStamped, PoseWithCovarianc
 import time
 from kobuki_msgs.msg import BumperEvent
 from actionlib_msgs.msg import GoalStatusArray
-from pedsim_msgs.msg  import TrackedPersons, TrackedPerson, DangerZone, DangerZones
+from pedsim_msgs.msg  import TrackedPersons, TrackedPerson, DangerZone, DangerZones, TrackedGroup, TrackedGroups, GMM, GMMGroup
 from cnn_msgs.msg import CNN_data
 from visualization_msgs.msg import Marker, MarkerArray
 
@@ -102,6 +102,10 @@ class DRLNavEnv(gym.Env):
         # vo algorithm:
         self.mht_peds = TrackedPersons()
 
+        #Gaussian process:
+        self.groups = TrackedGroups()
+        
+
         # To reset Simulations
         self.gazebo = GazeboConnection(
         start_init_physics_parameters=True,
@@ -112,7 +116,7 @@ class DRLNavEnv(gym.Env):
         # We Start all the ROS related Subscribers and publishers
         self._map_sub = rospy.Subscriber("/map", OccupancyGrid, self._map_callback)
         self._cnn_data_sub = rospy.Subscriber("/cnn_data", CNN_data, self._cnn_data_callback, queue_size=1, buff_size=2**24)
-        self._scan_sub = rospy.Subscriber("/scan", LaserScan, self._scan_callback)
+        self._scan_sub = rospy.Subscriber("/laser", LaserScan, self._scan_callback)
         self._robot_pos_sub = rospy.Subscriber("/robot_pose", PoseStamped, self._robot_pose_callback) #, queue_size=1)
         self._robot_vel_sub = rospy.Subscriber('/odom', Odometry, self._robot_vel_callback) #, queue_size=1)
         self._final_goal_sub = rospy.Subscriber("/move_base/current_goal", PoseStamped, self._final_goal_callback) #, queue_size=1)
@@ -136,6 +140,9 @@ class DRLNavEnv(gym.Env):
         # self._done_pub = rospy.Publisher('/drl_done', Bool, queue_size=1, latch=False)
         self._danger_zone_pub = rospy.Publisher('/danger_zone', MarkerArray, queue_size=1)
         self._debugging_pub = rospy.Publisher('/debugging', Float64, queue_size=1)
+        # self._norm_visual_pub = rospy.Publisher('/ellipses_marker', MarkerArray, queue_size=10)
+        self._groups_sub = rospy.Subscriber('/track_group', TrackedGroups, self._group_callback)
+        
         # self.controllers_object.reset_controllers()
         self._check_all_systems_ready()
         self.gazebo.pauseSim()   
@@ -673,6 +680,10 @@ class DRLNavEnv(gym.Env):
     def _ped_callback(self, trackPed_msg): 
         self.mht_peds = trackPed_msg
 
+    def _group_callback(self, trackGroup_msg):
+        self.groups = trackGroup_msg
+    
+
     # ----------------------------
 
     # Publisher functions to publish data
@@ -905,7 +916,6 @@ class DRLNavEnv(gym.Env):
         cmd_vel.linear.x = (action[0] + 1) * (vx_max - vx_min) / 2 + vx_min
         cmd_vel.angular.z = (action[1] + 1) * (vz_max - vz_min) / 2 + vz_min
         #self._check_publishers_connection()
-    
         rate = rospy.Rate(20)
         for _ in range(1):
             self._cmd_vel_pub.publish(cmd_vel)
@@ -922,8 +932,8 @@ class DRLNavEnv(gym.Env):
         """Calculates the reward to give based on the observations given.
         """
         # reward parameters:
-        r_arrival = 20 #15
-        r_waypoint = 3.2 #2.5 #1.6 #2 #3 #1.6 #6 #2.5 #2.5
+        r_arrival = 3#20 #15
+        r_waypoint = 0.25 #3.2 #2.5 #1.6 #2 #3 #1.6 #6 #2.5 #2.5
         r_collision = -20 #-15
         r_scan = -0.2 #-0.15 #-0.3
         r_angle = 0.6 #0.5 #1 #0.8 #1 #0.5
@@ -933,14 +943,16 @@ class DRLNavEnv(gym.Env):
         w_thresh = 1 # 0.7
 
         # reward parts:
-        #r_g = self._goal_reached_reward(r_arrival, r_waypoint)
-        r_g = self._goal_reached_dz_reward()
-        r_c = self._obstacle_collision_dz_punish(self.cnn_data.scan[-720:], -0.1, -1)
-        #r_c = self._obstacle_collision_punish(self.lidar_data, r_scan, r_collision)
+        r_g = self._goal_reached_reward(r_arrival, r_waypoint)
+        #r_g = self._goal_reached_dz_reward()
+        r_c = self._obstacle_collision_dz_punish(self.lidar_data, -0.2, -1)
+        #r_c = self._obstacle_collision_punish(self.cnn_data.scan[-720:], r_scan, r_collision)
         #r_w = self._angular_velocity_punish(self.curr_vel.angular.z,  r_rotation, w_thresh)
         #r_t = self._theta_reward(self.goal, self.mht_peds, self.curr_vel.linear.x, r_angle, angle_thresh)
-        r_d = self._danger_zone_punish(self.mht_peds, 0.75, 0.35)
-        reward = r_g + r_c + r_d #r_w + r_d  #+ r_t#+ r_v # + r_p
+        #r_d = self._danger_zone_punish(self.mht_peds, 0.75, 0.35)
+        r_g = self._GMM_punish(self.groups, self.mht_peds, -1)
+        #r_s = self._social_norm_punish(self.groups, self.mht_peds, -1)
+        reward = r_g + r_c + r_g #+ r_d #r_w + r_d  #+ r_t#+ r_v # + r_p
         #rospy.logwarn("Current Velocity: \ncurr_vel = {}".format(self.curr_vel.linear.x))
         #rospy.logwarn("Compute reward done. \nreward = {}".format(reward))
         return reward
@@ -966,8 +978,8 @@ class DRLNavEnv(gym.Env):
         if(self.num_iterations == 0):
             self.dist_to_goal_reg = np.ones(self.DIST_NUM)*dist_to_goal
 
-        #rospy.logwarn("distance_to_goal_reg = {}".format(self.dist_to_goal_reg[t_1]))
-        #rospy.logwarn("distance_to_goal = {}".format(dist_to_goal))
+        # rospy.logwarn("distance_to_goal_reg = {}".format(self.dist_to_goal_reg[t_1]))
+        # rospy.logwarn("distance_to_goal = {}".format(dist_to_goal))
         max_iteration = 512 #800 
         # reward calculation:
         if(dist_to_goal <= self.GOAL_RADIUS):  # goal reached: t = T
@@ -981,7 +993,7 @@ class DRLNavEnv(gym.Env):
         #if(self.num_iterations % 40 == 0):
         self.dist_to_goal_reg[t_1] = dist_to_goal #self.curr_pose
     
-        #rospy.logwarn("Goal reached reward: {}".format(reward))
+        rospy.logwarn("Goal reached reward: {}".format(reward))
         return reward
 
     def _goal_reached_dz_reward(self):
@@ -1025,6 +1037,7 @@ class DRLNavEnv(gym.Env):
         :param k reward constant
         :return: returns reward colliding with obstacles
         """
+        scan = np.array(scan.ranges)
         min_scan_dist = np.amin(scan[scan!=0])
         #if(self.bump_flag == True): #or self.pos_valid_flag == False):
         if(min_scan_dist <= self.ROBOT_RADIUS and min_scan_dist >= 0.02):
@@ -1108,6 +1121,13 @@ class DRLNavEnv(gym.Env):
         return reward  
 
     def _danger_zone_punish(self, mht_peds, r_static, m_v):
+        """
+        Returns negative reward if the robot intrudes into the danger zone
+        :param mht_peds: information of tracked persons
+        :param r_static: the basic radius of human
+        :param m_v: the rate of increase in radius with velocity
+        :return: returns reward 
+        """
         reward = 0
         human_radius = 0.3 # radius of human
         back_dist = 0.5
@@ -1169,15 +1189,6 @@ class DRLNavEnv(gym.Env):
           else:
               D = math.sqrt(pow((point_B.x-point_C.x),2)+pow((point_B.y-point_C.y),2))/2
               d = math.sqrt(pow((px-point_D.x),2)+pow((py-point_D.y),2))
-              # a = pow(human_radius,2)-pow(D,2)
-              # b = 2*d*pow(human_radius,2)
-              # c = pow(human_radius,2)*pow(d,2)+pow(D,2)*pow(human_radius,2)
-              # m = 2 * (-b-math.sqrt(b*b-4*a*c))/2*a
-              # #rospy.logwarn("m:%.4f, r0:%.4f", m, r0)
-              # point_L = Point()
-              # point_L.x = ((m + d) * px - m * point_D.x) / d
-              # point_L.y = ((m + d) * py - m * point_D.y) / d
-              # alpha = 2*math.atan2(D,d+m)
 
               point_L = Point()
               point_L.x = ((human_radius+back_dist+d)*px -\
@@ -1193,36 +1204,6 @@ class DRLNavEnv(gym.Env):
               dangerzone.id = id
               id = id + 1
 
-          # if theta<math.pi:
-          #   D = math.sqrt(pow((point_B.x-point_C.x),2)+pow((point_B.y-point_C.y),2))
-          #   point_D = Point()
-          #   point_D.x = (point_B.x+point_C.x)/2
-          #   point_D.y = (point_B.y+point_C.y)/2
-          #   d = math.sqrt(pow((px-point_D.x),2)+pow((py-point_D.y),2))
-          #   point_L = Point()
-          #   point_L.x = (0.5*D*px-(human_radius+0.1)*point_D.x)/(0.5*D-(human_radius+0.1))
-          #   point_L.y = (0.5*D*py-(human_radius+0.1)*point_D.y)/(0.5*D-(human_radius+0.1))
-          #   alpha = 2*math.atan2(0.5*D,d+(d*(human_radius+0.1)/(0.5*D-(human_radius+0.1))))
-          #   m = d*(human_radius+0.1)/(0.5*D-(human_radius+0.1))
-
-          #   dangerzone.point_L = point_L
-          #   dangerzone.radius = r0+m
-          #   dangerzone.d_angle = beta
-          #   dangerzone.size_angle = alpha
-          #   dangerzone.id = id
-          #   id = id + 1
-
-          # else:
-          #   point_L = Point()
-          #   point_L.x = px
-          #   point_L.y = py
-
-          #   dangerzone.point_L = point_L
-          #   dangerzone.radius = r0
-          #   dangerzone.d_angle = beta
-          #   dangerzone.size_angle = theta
-          #   dangerzone.id = id
-          #   id = id + 1
 
           dist_robot_TO_ped = math.sqrt(pow(point_L.x, 2) + pow(point_L.y, 2))
           # for visualize
@@ -1292,8 +1273,256 @@ class DRLNavEnv(gym.Env):
         rospy.logwarn("Danger zone punish reward: {}".format(reward))
         self._danger_zone_pub.publish(dangerzone_makerarray)
         return reward
-        
-    
+
+    def _GMM_punish(self, groups, mht_peds, max_punish):
+        """
+        Returns negative reward if the robot violates the social norms
+        :param groups: the tracked human groups
+        :param mht_peds: information of tracked persons
+        :param max_punish: max punish  
+        :return: reward 
+        """
+
+        ped_list = np.arange(1, 35, 1).tolist()
+        reward = 0
+        human_radius = 0.3
+        p_space_width = 0.6
+
+        for group in groups.groups:
+            # get the centroid
+            center = Point()
+            center.x = group.centerOfGravity.pose.position.x
+            center.y = group.centerOfGravity.pose.position.y
+            # calculate the radius of group
+            max_radius = -np.Infinity
+            for index in group.track_ids:
+                ped_list.remove(index)
+                ped_i = mht_peds.tracks[index - 1]
+                h_position = Point()
+                h_position.x = ped_i.pose.pose.position.x
+                h_position.y = ped_i.pose.pose.position.y
+                radius_i = math.sqrt(pow(h_position.x-center.x, 2) +\
+                                     pow(h_position.y-center.y, 2))
+                if radius_i > max_radius:
+                    max_radius = radius_i
+            # define the GMM_group
+            g_GMM = GMMGroup()
+            g_GMM.position = center
+            g_GMM.radius = max_radius
+            g_GMM.delta_x = 0.64
+            g_GMM.delta_y = 0.64
+            # calculate the collision probability
+            d = math.sqrt(pow(0-center.x, 2) + pow(0-center.y, 2))
+            if d > g_GMM.radius and d < (g_GMM.radius + self.ROBOT_RADIUS + human_radius + p_space_width): 
+                prob = math.exp(-(pow(d/(math.sqrt(2)*g_GMM.delta_x), 2) +\
+                                  pow(d/(math.sqrt(2)*g_GMM.delta_y), 2)))
+                reward += prob * max_punish
+            elif d < g_GMM.radius:
+                reward += max_punish        
+
+        f0 = 1.0
+        fv = 1.33 #0.66 # 0.6
+        fi = 0.3 # 0.25
+        for index in ped_list:
+            ped_i = mht_peds.tracks[index -1]
+            #get the position and pose of human_i
+            h_position = Point()
+            h_velocity = Twist()
+            h_speed = 0
+            h_pose = 0
+            h_position.x = ped_i.pose.pose.position.x 
+            h_position.y = ped_i.pose.pose.position.y     
+            h_velocity.linear.x = ped_i.twist.twist.linear.x
+            h_velocity.linear.y = ped_i.twist.twist.linear.y
+            h_speed = math.sqrt(pow(h_velocity.linear.x, 2) + pow(h_velocity.linear.y, 2))
+            h_pose = math.atan2(h_velocity.linear.y, h_velocity.linear.x)
+            if h_pose < 0:
+                h_pose += 2*math.pi
+            # get the relative_pose
+            relative_pose = math.atan2(0-h_position.y, 0-h_position.x)
+            if relative_pose < 0:
+                relative_pose += 2*math.pi
+            relative_pose = relative_pose - h_pose
+            # get the covariance matrix
+            delta_x = (f0 + h_speed * fv) * fi * 1.0
+            delta_y = fi * 1.0
+            # define the GMM of individual
+            h_GMM = GMM()
+            h_GMM.delta_x = delta_x
+            h_GMM.delta_y = delta_y
+            h_GMM.position = h_position
+            h_GMM.theta = relative_pose
+            h_GMM.id = index
+            # calculate the collision probability
+            d = math.sqrt(pow(0-h_GMM.position.x, 2) + pow(0-h_GMM.position.y, 2))
+            if h_GMM.theta > 0.5*math.pi and h_GMM.theta < 1.5*math.pi:
+              prob = math.exp(-(pow((d*math.cos(h_GMM.theta))/(math.sqrt(2)*h_GMM.delta_y), 2) +\
+                                pow((d*math.sin(h_GMM.theta))/(math.sqrt(2)*h_GMM.delta_y), 2)))
+            else:
+              prob = math.exp(-(pow((d*math.cos(h_GMM.theta))/(math.sqrt(2)*h_GMM.delta_x), 2) +\
+                                pow((d*math.sin(h_GMM.theta))/(math.sqrt(2)*h_GMM.delta_y), 2)))
+            if prob > 0.1:
+                reward += prob * max_punish
+
+        rospy.logwarn("GMM punish: %.4f", reward)
+        return reward
+
+    def _social_norm_punish(self, groups, mht_peds, max_punish):
+        """
+        Returns negative reward if the robot violates the social norms
+        :param groups: the tracked human groups
+        :param mht_peds: information of tracked persons
+        :param max_punish: max punish  
+        :return: reward 
+        """
+        ped_list = np.arange(1, 35, 1).tolist()
+        reward = 0
+        m = 0.4
+        d0 = 0.6
+        delta_d = 0.5
+        marker_array = MarkerArray()
+        group_id = 0
+
+        # group nrom
+        for group in groups.groups:
+            group_id += 1
+            # get the centroid
+            center = Point()
+            center.x = group.centerOfGravity.pose.position.x
+            center.y = group.centerOfGravity.pose.position.y
+            nums_human = 0
+            velocity = Twist()
+            for index in group.track_ids:
+                ped_list.remove(index)
+                ped_i = mht_peds.tracks[index - 1]
+                velocity.linear.x += ped_i.twist.twist.linear.x
+                velocity.linear.y += ped_i.twist.twist.linear.y
+                nums_human += 1
+            velocity.linear.x = velocity.linear.x / nums_human
+            velocity.linear.y = velocity.linear.y / nums_human
+            velocity_angle = math.atan2(velocity.linear.y, velocity.linear.x)
+            if velocity_angle < 0:
+                velocity_angle += 2*math.pi
+            v = math.sqrt(pow(velocity.linear.x, 2) + pow(velocity.linear.y, 2))
+            d = d0 + delta_d * (nums_human - 1)
+            a = m * v + d
+            b = d
+            c = math.sqrt(a * a - b * b)
+            focus1 = focus2 = Point()
+            focus1.x = center.x + c * math.cos(velocity_angle)
+            focus1.y = center.y + c * math.sin(velocity_angle)
+            focus2.x = center.x - c * math.cos(velocity_angle)
+            focus2.y = center.y - c * math.sin(velocity_angle)
+            dist = math.sqrt(pow(center.x, 2) + pow(center.y, 2))
+
+            angle_g_r = math.atan2(-center.y, -center.x)
+            if angle_g_r < 0:
+                angle_g_r += 2*math.pi
+            if angle_g_r > velocity_angle - math.pi/2 and \
+              angle_g_r < velocity_angle + math.pi/2:
+                if (self.dist_point_point(focus1, Point()) +\
+                  self.dist_point_point(focus2, Point())) < 2 * a:
+                    prob = math.exp(-4 * dist)
+                    reward += prob * max_punish
+            else:
+                if dist < d:
+                    prob = math.exp(-4 * dist)
+                    reward += prob * max_punish
+            # for visualize
+            # ellipse_marker = Marker()
+            # ellipse_marker.header.frame_id = "base_footprint"
+            # ellipse_marker.type = Marker.LINE_STRIP
+            # ellipse_marker.action = Marker.ADD
+            # ellipse_marker.id = group_id
+            # ellipse_marker.scale.x = 0.05
+            # ellipse_marker.color.a = 1.0  
+            # ellipse_marker.color.r = 1.0  
+            # ellipse_marker.color.g = 0.0
+            # ellipse_marker.color.b = 0.0
+
+            # num_points = 36
+            # for i in range(num_points):
+            #     angle_i = 2 * math.pi * i / num_points
+            #     x = center.x + a * math.cos(angle_i) * math.cos(velocity_angle) -\
+            #       b * math.sin(angle_i) * math.sin(velocity_angle)
+            #     y = center.y + a * math.cos(angle_i) * math.sin(velocity_angle) +\
+            #       b * math.sin(angle_i) * math.cos(velocity_angle)
+            #     p = Point()
+            #     p.x = x
+            #     p.y = y
+            #     ellipse_marker.points.append(p)
+
+            # marker_array.markers.append(ellipse_marker)
+
+        human_id = group_id        
+        # individual nrom
+        for index in ped_list:
+            human_id += 1
+            ped_i = mht_peds.tracks[index -1]
+            velocity = Twist()
+            position = Point()
+            velocity.linear.x = ped_i.twist.twist.linear.x      
+            velocity.linear.y = ped_i.twist.twist.linear.y
+            position.x = ped_i.pose.pose.position.x
+            position.y = ped_i.pose.pose.position.y
+            velocity_angle = math.atan2(velocity.linear.y, velocity.linear.x)
+            v = math.sqrt(pow(velocity.linear.x, 2) + pow(velocity.linear.y, 2))
+            d = d0
+            a = m * v + d
+            b = d
+            c = math.sqrt(a * a - b * b)
+            focus1 = focus2 = Point()
+            focus1.x = position.x + c * math.cos(velocity_angle)
+            focus1.y = position.y + c * math.sin(velocity_angle)
+            focus2.x = position.x - c * math.cos(velocity_angle)
+            focus2.y = position.y - c * math.sin(velocity_angle)
+            
+            dist = math.sqrt(pow(position.x, 2) + pow(position.y, 2))
+            if math.atan2(position.y, position.x) > velocity_angle - 0.5 * math.pi and\
+              math.atan2(position.y, position.x) < velocity_angle + 0.5 * math.pi:
+              if (self.dist_point_point(focus1, Point()) +\
+                self.dist_point_point(focus2, Point())) < 2 * a:
+                prob = math.exp(- 4 * dist)
+                reward += prob * max_punish
+            else:
+              if dist < d:
+                prob = math.exp(- 4 * dist)
+                reward += prob * max_punish      
+            
+            # ellipse_marker = Marker()
+            # ellipse_marker.header.frame_id = "base_footprint"
+            # ellipse_marker.type = Marker.LINE_STRIP
+            # ellipse_marker.action = Marker.ADD
+            # ellipse_marker.id = human_id
+            # ellipse_marker.scale.x = 0.05
+            # ellipse_marker.color.a = 1.0  
+            # ellipse_marker.color.r = 1.0  
+            # ellipse_marker.color.g = 0.0
+            # ellipse_marker.color.b = 0.0
+
+            # num_points = 36
+            # for i in range(num_points):
+            #     angle_i = 2 * math.pi * i / num_points
+            #     x = position.x + a * math.cos(angle_i) * math.cos(velocity_angle) -\
+            #       b * math.sin(angle_i) * math.sin(velocity_angle)
+            #     y = position.y + a * math.cos(angle_i) * math.sin(velocity_angle) +\
+            #       b * math.sin(angle_i) * math.cos(velocity_angle)
+            #     p = Point()
+            #     p.x = x
+            #     p.y = y
+            #     ellipse_marker.points.append(p)
+
+            # marker_array.markers.append(ellipse_marker)
+
+        # self._norm_visual_pub.publish(marker_array)
+        rospy.logwarn("social norm punish: %.4f", reward)
+        return reward
+
+    def dist_point_point(self, point1, point2):
+        dist = 0
+        dist = math.sqrt(pow(point1.x - point2.x, 2) + pow(point1.y - point2.y, 2))
+        return dist
+
     def _is_done(self, reward):
         """
         Checks if end of episode is reached. It is reached,
@@ -1306,7 +1535,7 @@ class DRLNavEnv(gym.Env):
         """
         # updata the number of iterations:
         self.num_iterations += 1
-        #rospy.logwarn("\nnum_iterations = {}".format(self.num_iterations))
+        rospy.logwarn("\nnum_iterations = {}".format(self.num_iterations))
 
         # 1) Goal reached?
         # distance to goal:
