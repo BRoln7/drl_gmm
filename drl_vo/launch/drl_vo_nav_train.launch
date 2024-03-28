@@ -1,14 +1,37 @@
 <launch>
   <arg name="scene_file" default="$(find pedsim_simulator)/scenarios/eng_hall.xml"/>
+  <!-- <arg name="scene_file" default="$(find pedsim_simulator)/scenarios/autolab/autolab_35_v1.xml"/> -->
+  <!-- <arg name="scene_file" default="$(find pedsim_simulator)/scenarios/cumberland/cumberland_25.xml"/> -->
+  <!-- <arg name="scene_file" default="$(find pedsim_simulator)/scenarios/freiburg/freiburg_25.xml"/> -->
+  <!-- <arg name="scene_file" default="$(find pedsim_simulator)/scenarios/hallway.xml"/> -->
+  <!-- <arg name="scene_file" default="$(find pedsim_simulator)/scenarios/Hallway_with_obs.xml"/> -->
+  <!-- <arg name="scene_file" default="$(find pedsim_simulator)/scenarios/circle_hallway.xml"/> -->
   <arg name="world_name" default="$(find pedsim_gazebo_plugin)/worlds/eng_hall.world"/>
+  <!-- <arg name="world_name" default="$(find pedsim_gazebo_plugin)/worlds/autolab.world"/> -->
+  <!-- <arg name="world_name" default="$(find pedsim_gazebo_plugin)/worlds/cumberland.world"/> -->
+  <!-- <arg name="world_name" default="$(find pedsim_gazebo_plugin)/worlds/freiburg.world"/> -->
+  <!-- <arg name="world_name" default="$(find pedsim_gazebo_plugin)/worlds/hallway.world"/>   -->
+  <!-- <arg name="world_name" default="$(find pedsim_gazebo_plugin)/worlds/Hallway_with_obs.world"/> -->
+  <!-- <arg name="world_name" default="$(find pedsim_gazebo_plugin)/worlds/circle_hallway.world"/> --> 
   <arg name="gui" default="true" doc="Bring up the Gazebo graphical interface"/>
   <arg name="pose_initial_x" default="1.0"/> 
   <arg name="pose_initial_y" default="1.0"/>
+  <!-- <arg name="pose_initial_x" default="10.0"/> 
+  <arg name="pose_initial_y" default="10.0"/>   -->
   <arg name="map_file" default="$(find robot_gazebo)/maps/gazebo_eng_lobby/gazebo_eng_lobby.yaml"/>
+  <!-- <arg name="map_file" default="$(find robot_gazebo)/maps/gazebo_autolab/gazebo_autolab.yaml"/> -->
+  <!-- <arg name="map_file" default="$(find robot_gazebo)/maps/gazebo_cumberland/gazebo_cumberland.yaml"/> -->
+  <!-- <arg name="map_file" default="$(find robot_gazebo)/maps/gazebo_frieburg/gazebo_frieburg.yaml"/> -->
+  <!-- <arg name="map_file" default="$(find robot_gazebo)/maps/hallway/hallway.yaml"/> -->
+  <!-- <arg name="map_file" default="$(find robot_gazebo)/maps/hallway_with_obs/hallway_with_obs.yaml"/> -->
+  <!-- <arg name="map_file" default="$(find robot_gazebo)/maps/circle_hallway/circle_hallway.yaml"/> -->
+  <!-- <arg name="map_file" default="$(find robot_gazebo)/maps/hall/hall.yaml"/> -->
   <arg name="initial_pose_x" default="1.0"/>
   <arg name="initial_pose_y" default="0.0"/>
+  <!-- <arg name="initial_pose_x" default="8.5"/>
+  <arg name="initial_pose_y" default="2.0"/> -->
   <arg name="initial_pose_a" default="0.13"/>
-  <arg name="model_file" default="$(find drl_vo_nav)/src/model/drl_pre_train.zip"/>
+  <!-- <arg name="model_file" default="$(find drl_vo_nav)/src/model/drl_pre_train.zip"/> -->
   <arg name="log_dir"   default="$(find drl_vo_nav)/src/runs"/>
   <!-- Output -->
   <arg name="output" default="log"/>
@@ -38,7 +61,7 @@
 
   <!-- DRL-VO Control Policy -->
   <include file="$(find drl_vo_nav)/launch/drl_vo_train.launch">
-    <arg name="model_file" value="$(arg model_file)"/>
+    <!-- <arg name="model_file" value="$(arg model_file)"/> -->
     <arg name="log_dir" value="$(arg log_dir)"/>
   </include>
 

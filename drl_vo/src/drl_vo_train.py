@@ -7,7 +7,7 @@
 #
 # This script is to train the DRL-VO policy using the PPO algorithm.
 #------------------------------------------------------------------------------
-
+import csv
 import numpy as np
 import gym
 import turtlebot_gym
@@ -37,6 +37,9 @@ class SaveOnBestTrainingRewardCallback(BaseCallback):
         self.log_dir = log_dir
         self.save_path = os.path.join(log_dir, 'best_model')
         self.best_mean_reward = -np.inf
+        # self.metrics_file = open('metrics.csv', mode='w', newline='')
+        # self.metrics_writer = csv.writer(self.metrics_file)
+        # self.metrics_writer.writerow(['Episode', 'Reward', 'Value', 'Policy_Gradient'])
 
     def _init_callback(self) -> None:
         # Create folder if needed
@@ -70,7 +73,25 @@ class SaveOnBestTrainingRewardCallback(BaseCallback):
           self.model.save(path)
 	  
         return True
+    
+    # def _on_rollout_end(self) -> None:
+    #     episode_rewards = [ep_info['r'] for ep_info in self.model.ep_info_buffer]
+    #     episode_values = [value[0] for value in self.model.rollout_buffer.values]
+        
+    #     policy_gradients = []
+    #     for obs in self.model.rollout_buffer.observations:
+    #         obs_tensor = torch.as_tensor(obs, dtype=torch.float32)
+    #         _, action_prob = self.model.policy.forward(obs_tensor)
+    #         log_prob = torch.log(action_prob)
+    #         grad_log_prob = torch.autograd.grad(log_prob, self.model.policy.parameters(), retain_graph=True)
+    #         flat_grad_log_prob = torch.cat([g.contiguous().view(-1) for g in grad_log_prob])
+    #         policy_gradients.append(flat_grad_log_prob.detach().numpy())
 
+    #     for i in range(len(episode_rewards)):
+    #         self.metrics_writer.writerow([self.num_timesteps, episode_rewards[i], episode_values[i], policy_gradients[i]])
+
+    # def _on_training_end(self) -> None:
+    #     self.metrics_file.close()
 
 # create ros node:
 rospy.init_node('env_test', anonymous=True, log_level=rospy.WARN) #log_level=rospy.ERROR)   
@@ -97,7 +118,7 @@ policy_kwargs = dict(
 
 # continue training:
 kwargs = {'tensorboard_log':log_dir, 'verbose':2, 'n_epochs':10, 'n_steps':512, 'batch_size':128,'learning_rate':5e-5}
-model_file = rospy.get_param('~model_file', "./model/drl_pre_train.zip")
+model_file = rospy.get_param('~model_file', )#"/home/lab423/drl_GMM_Hallway_no_collision_runs/best_model.zip")
 model = PPO.load(model_file, env=env, **kwargs)
 
 # Create the callback: check every 1000 steps
@@ -108,5 +129,3 @@ model.learn(total_timesteps=2000000, log_interval=5, tb_log_name='drl_vo_policy'
 model.save("drl_vo_model")
 print("Training finished.")
 env.close()
-
-

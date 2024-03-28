@@ -123,6 +123,7 @@ class CnnData:
         self.scan_all_tmp = scan_data
 
 
+
     # Callback function for the current goal subscriber
     def goal_callback(self, goal_msg):
         # Cartesian coordinate:

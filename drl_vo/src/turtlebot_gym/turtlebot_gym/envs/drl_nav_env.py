@@ -13,6 +13,7 @@ import numpy.matlib
 import random
 import math
 from scipy.optimize import linprog, minimize
+import tf.transformations as tf
 #import sympy as sp
 import threading
 
@@ -54,7 +55,7 @@ class DRLNavEnv(gym.Env):
 
         # robot parameters:
         self.ROBOT_RADIUS = 0.3
-        self.GOAL_RADIUS = 0.3 #0.3
+        self.GOAL_RADIUS = 0.5 #0.3
         self.DIST_NUM = 10
         self.pos_valid_flag = True
         # bumper:
@@ -81,6 +82,7 @@ class DRLNavEnv(gym.Env):
         self.ped_pos = []
         self.scan = []
         self.goal = []
+        self.sub_goal = Point()
         #self.vel = []
        
         # self.observation_space = spaces.Box(low=-30, high=30, shape=(6402,), dtype=np.float32)
@@ -130,6 +132,7 @@ class DRLNavEnv(gym.Env):
         self._cmd_vel_pub = rospy.Publisher('/drl_cmd_vel', Twist, queue_size=5, latch=False)
         # Publish goal:
         self._initial_goal_pub = rospy.Publisher('/move_base_simple/goal', PoseStamped, queue_size=1, latch=True)
+        self._sub_goal_sub = rospy.Subscriber('/cnn_goal', Point, self._sub_goal_callback)
         # Set model state:
         # self._set_robot_state_publisher = rospy.Publisher("/gazebo/set_model_state", ModelState, queue_size=1, latch=False)
         self._set_robot_state_service = rospy.ServiceProxy('/gazebo/set_model_state', SetModelState)
@@ -142,7 +145,7 @@ class DRLNavEnv(gym.Env):
         self._debugging_pub = rospy.Publisher('/debugging', Float64, queue_size=1)
         # self._norm_visual_pub = rospy.Publisher('/ellipses_marker', MarkerArray, queue_size=10)
         self._groups_sub = rospy.Subscriber('/track_group', TrackedGroups, self._group_callback)
-        
+        self._GMM_pub = rospy.Publisher('/GMM', MarkerArray, queue_size=1)
         # self.controllers_object.reset_controllers()
         self._check_all_systems_ready()
         self.gazebo.pauseSim()   
@@ -282,6 +285,41 @@ class DRLNavEnv(gym.Env):
         return self.init_pose, self.goal_position
 
     def _set_initial_pose(self, seed_initial_pose):
+        # if(seed_initial_pose == 0):
+        #     # set turtlebot initial pose in gazebo:
+        #     self._pub_initial_model_state(1, 1, 0)
+        #     time.sleep(1)
+        #     '''
+        #     # reset robot odometry:
+        #     timer = time.time()
+        #     while time.time() - timer < 0.5:
+        #         self._reset_odom_pub.publish(Empty())
+        #     '''
+        #     # reset robot inital pose in rviz:
+        #     self._pub_initial_position(1, 0, 0)
+        # elif(seed_initial_pose == 1):
+        #     self._pub_initial_model_state(19, 5, 0)
+        #     time.sleep(1)
+        #     '''
+        #     # reset robot odometry:
+        #     timer = time.time()
+        #     while time.time() - timer < 0.5:
+        #         self._reset_odom_pub.publish(Empty())
+        #     '''
+        #     # reset robot inital pose in rviz:
+        #     self._pub_initial_position(19, 5, 0)
+        # else:
+        #     self._pub_initial_model_state(1, 1, 0)
+        #     time.sleep(1)
+        #     '''
+        #     # reset robot odometry:
+        #     timer = time.time()
+        #     while time.time() - timer < 0.5:
+        #         self._reset_odom_pub.publish(Empty())
+        #     '''
+        #     # reset robot inital pose in rviz:
+        #     self._pub_initial_position(1, 1, 0)
+
         if(seed_initial_pose == 0):
             # set turtlebot initial pose in gazebo:
             self._pub_initial_model_state(1, 1, 0)
@@ -683,6 +721,8 @@ class DRLNavEnv(gym.Env):
     def _group_callback(self, trackGroup_msg):
         self.groups = trackGroup_msg
     
+    def _sub_goal_callback(self, subGoal_msg):
+        self.sub_goal = subGoal_msg
 
     # ----------------------------
 
@@ -932,7 +972,7 @@ class DRLNavEnv(gym.Env):
         """Calculates the reward to give based on the observations given.
         """
         # reward parameters:
-        r_arrival = 3#20 #15
+        r_arrival = 4#20 #15
         r_waypoint = 0.25 #3.2 #2.5 #1.6 #2 #3 #1.6 #6 #2.5 #2.5
         r_collision = -20 #-15
         r_scan = -0.2 #-0.15 #-0.3
@@ -945,14 +985,14 @@ class DRLNavEnv(gym.Env):
         # reward parts:
         r_g = self._goal_reached_reward(r_arrival, r_waypoint)
         #r_g = self._goal_reached_dz_reward()
-        r_c = self._obstacle_collision_dz_punish(self.lidar_data, -0.2, -1)
+        # r_c = self._obstacle_collision_dz_punish(self.lidar_data, -0.05, -1.0)
         #r_c = self._obstacle_collision_punish(self.cnn_data.scan[-720:], r_scan, r_collision)
         #r_w = self._angular_velocity_punish(self.curr_vel.angular.z,  r_rotation, w_thresh)
         #r_t = self._theta_reward(self.goal, self.mht_peds, self.curr_vel.linear.x, r_angle, angle_thresh)
         #r_d = self._danger_zone_punish(self.mht_peds, 0.75, 0.35)
-        r_g = self._GMM_punish(self.groups, self.mht_peds, -1)
+        r_n = self._GMM_punish(self.groups, self.mht_peds, -1.0)
         #r_s = self._social_norm_punish(self.groups, self.mht_peds, -1)
-        reward = r_g + r_c + r_g #+ r_d #r_w + r_d  #+ r_t#+ r_v # + r_p
+        reward = r_g + r_n #+ r_c #+ r_d #r_w + r_d  #+ r_t#+ r_v # + r_p
         #rospy.logwarn("Current Velocity: \ncurr_vel = {}".format(self.curr_vel.linear.x))
         #rospy.logwarn("Compute reward done. \nreward = {}".format(reward))
         return reward
@@ -971,7 +1011,7 @@ class DRLNavEnv(gym.Env):
             self.curr_pose.position.y - self.goal_position.y,
             self.curr_pose.position.z - self.goal_position.z
             ])
-        )
+        )     
         # t-1 id:
         t_1 = self.num_iterations % self.DIST_NUM
         # initialize the dist_to_goal_reg:
@@ -985,7 +1025,7 @@ class DRLNavEnv(gym.Env):
         if(dist_to_goal <= self.GOAL_RADIUS):  # goal reached: t = T
             reward = r_arrival
         elif(self.num_iterations >= max_iteration):  # failed to the goal
-            reward = -r_arrival
+            reward = -r_arrival     
         else:   # on the way
             reward = r_waypoint*(self.dist_to_goal_reg[t_1] - dist_to_goal)
 
@@ -1004,13 +1044,12 @@ class DRLNavEnv(gym.Env):
             self.curr_pose.position.z - self.goal_position.z
             ])
         )
-        if dist_to_goal < 0.1:
+        if dist_to_goal < self.GOAL_RADIUS:
             reward = 1
         else:
             reward = 0
         return reward         
         
-
     def _obstacle_collision_punish(self, scan, r_scan, r_collision):
         """
         Returns negative reward if the robot collides with obstacles.
@@ -1286,8 +1325,10 @@ class DRLNavEnv(gym.Env):
         ped_list = np.arange(1, 35, 1).tolist()
         reward = 0
         human_radius = 0.3
-        p_space_width = 0.6
-
+        p_space_width_front = 0.25
+        p_space_width_side = 0.10
+        GMM_markerarray = MarkerArray()
+        marker_id = 0
         for group in groups.groups:
             # get the centroid
             center = Point()
@@ -1295,34 +1336,107 @@ class DRLNavEnv(gym.Env):
             center.y = group.centerOfGravity.pose.position.y
             # calculate the radius of group
             max_radius = -np.Infinity
+            g_velocity = Point()
+            humen_nums = 0
             for index in group.track_ids:
+                humen_nums += 1
                 ped_list.remove(index)
                 ped_i = mht_peds.tracks[index - 1]
                 h_position = Point()
                 h_position.x = ped_i.pose.pose.position.x
                 h_position.y = ped_i.pose.pose.position.y
+                g_velocity.x += ped_i.twist.twist.linear.x
+                g_velocity.y += ped_i.twist.twist.linear.y
                 radius_i = math.sqrt(pow(h_position.x-center.x, 2) +\
                                      pow(h_position.y-center.y, 2))
                 if radius_i > max_radius:
                     max_radius = radius_i
             # define the GMM_group
             g_GMM = GMMGroup()
+            g_velocity.x = g_velocity.x / humen_nums
+            g_velocity.y = g_velocity.y / humen_nums
+            g_pose = math.atan2(g_velocity.y, g_velocity.x)
+            if g_pose < 0:
+                g_pose += 2 * math.pi
+            relative_pose = math.atan2(-center.x, -center.y)
+            if relative_pose < 0:
+                relative_pose += 2*math.pi
+            relative_pose = relative_pose - g_pose
+
             g_GMM.position = center
             g_GMM.radius = max_radius
-            g_GMM.delta_x = 0.64
-            g_GMM.delta_y = 0.64
+            g_GMM.delta_x = (g_GMM.radius + human_radius + p_space_width_front)/\
+              math.sqrt(math.log(2))  #0.64
+            g_GMM.delta_y = (g_GMM.radius + human_radius + p_space_width_side)/\
+              math.sqrt(math.log(2))  #0.64
             # calculate the collision probability
-            d = math.sqrt(pow(0-center.x, 2) + pow(0-center.y, 2))
-            if d > g_GMM.radius and d < (g_GMM.radius + self.ROBOT_RADIUS + human_radius + p_space_width): 
-                prob = math.exp(-(pow(d/(math.sqrt(2)*g_GMM.delta_x), 2) +\
-                                  pow(d/(math.sqrt(2)*g_GMM.delta_y), 2)))
-                reward += prob * max_punish
-            elif d < g_GMM.radius:
-                reward += max_punish        
+            d = math.sqrt(pow(0-center.x, 2) + pow(0-center.y, 2)) - self.ROBOT_RADIUS
+            if d > g_GMM.radius:
+                prob = 0
+                if relative_pose > 0.5 * math.pi and relative_pose < 1.5 * math.pi: 
+                  prob = math.exp(-(pow(d/(math.sqrt(2)*g_GMM.delta_x), 2) +\
+                                    pow(d/(math.sqrt(2)*g_GMM.delta_y), 2)))
+                else:
+                  prob = math.exp(-(pow(d/(math.sqrt(2)*g_GMM.delta_y), 2) +\
+                                    pow(d/(math.sqrt(2)*g_GMM.delta_y), 2)))
+                if prob >= 0.5: 
+                  reward += prob * max_punish
+            elif d <= g_GMM.radius:
+                reward += 2 * max_punish
+
+            marker = Marker()
+            marker.header.frame_id = "base_footprint"
+            marker.header.stamp = rospy.Time.now()
+            marker.ns = "circle"
+            marker.id = marker_id
+            marker.type = Marker.SPHERE
+            marker.action = Marker.ADD
+            marker.pose.position.x = center.x
+            marker.pose.position.y = center.y
+            marker.pose.position.z = 0
+            quaternion = tf.quaternion_from_euler(0.0, 0.0, g_pose)
+            marker.pose.orientation.x = quaternion[0]
+            marker.pose.orientation.y = quaternion[1]
+            marker.pose.orientation.z = quaternion[2]
+            marker.pose.orientation.w = quaternion[3]
+            marker.scale.x = 2 * (g_GMM.radius + human_radius + p_space_width_front)
+            marker.scale.y = 2 * (g_GMM.radius + human_radius + p_space_width_side)
+            marker.scale.z = 0.01
+            marker.color.a = 0.5
+            marker.color.r = 1.0  
+            marker.color.g = 0.0
+            marker.color.b = 0.0
+            GMM_markerarray.markers.append(marker)
+
+            marker = Marker()
+            marker.header.frame_id = "base_footprint"
+            marker.header.stamp = rospy.Time.now()
+            marker.ns = "circle"
+            marker.id = marker_id + 30
+            marker.type = Marker.SPHERE
+            marker.action = Marker.ADD
+            marker.pose.position.x = center.x
+            marker.pose.position.y = center.y
+            marker.pose.position.z = 0
+            marker.pose.orientation.x = 0.0
+            marker.pose.orientation.y = 0.0
+            marker.pose.orientation.z = 0.0
+            marker.pose.orientation.w = 1.0
+            marker.scale.x = 2 * g_GMM.radius
+            marker.scale.y = 2 * g_GMM.radius
+            marker.scale.z = 0.01
+            marker.color.a = 0.5
+            marker.color.r = 0.0  
+            marker.color.g = 0.0
+            marker.color.b = 1.0
+            GMM_markerarray.markers.append(marker)
+
+            marker_id += 1
+
 
         f0 = 1.0
-        fv = 1.33 #0.66 # 0.6
-        fi = 0.3 # 0.25
+        fv = 11 / 6 #0.5 #0.8  #0.66 #1.33 
+        fi = 0.55 #0.7 #0.3 # 0.25
         for index in ped_list:
             ped_i = mht_peds.tracks[index -1]
             #get the position and pose of human_i
@@ -1335,9 +1449,10 @@ class DRLNavEnv(gym.Env):
             h_velocity.linear.x = ped_i.twist.twist.linear.x
             h_velocity.linear.y = ped_i.twist.twist.linear.y
             h_speed = math.sqrt(pow(h_velocity.linear.x, 2) + pow(h_velocity.linear.y, 2))
+            #rospy.logwarn("human_velocity:%.3f, index: %d", h_speed, index)
             h_pose = math.atan2(h_velocity.linear.y, h_velocity.linear.x)
             if h_pose < 0:
-                h_pose += 2*math.pi
+                h_pose += 2 * math.pi
             # get the relative_pose
             relative_pose = math.atan2(0-h_position.y, 0-h_position.x)
             if relative_pose < 0:
@@ -1354,16 +1469,66 @@ class DRLNavEnv(gym.Env):
             h_GMM.theta = relative_pose
             h_GMM.id = index
             # calculate the collision probability
-            d = math.sqrt(pow(0-h_GMM.position.x, 2) + pow(0-h_GMM.position.y, 2))
+            d = math.sqrt(pow(0-h_GMM.position.x, 2) + pow(0-h_GMM.position.y, 2)) - self.ROBOT_RADIUS
             if h_GMM.theta > 0.5*math.pi and h_GMM.theta < 1.5*math.pi:
               prob = math.exp(-(pow((d*math.cos(h_GMM.theta))/(math.sqrt(2)*h_GMM.delta_y), 2) +\
                                 pow((d*math.sin(h_GMM.theta))/(math.sqrt(2)*h_GMM.delta_y), 2)))
             else:
               prob = math.exp(-(pow((d*math.cos(h_GMM.theta))/(math.sqrt(2)*h_GMM.delta_x), 2) +\
                                 pow((d*math.sin(h_GMM.theta))/(math.sqrt(2)*h_GMM.delta_y), 2)))
-            if prob > 0.1:
+            if prob >= 0.5:
                 reward += prob * max_punish
 
+            marker = Marker()
+            marker.header.frame_id = "base_footprint"
+            marker.header.stamp = rospy.Time.now()
+            marker.ns = "circle"
+            marker.id = marker_id
+            marker.type = Marker.SPHERE
+            marker.action = Marker.ADD
+            marker.pose.position.x = h_GMM.position.x
+            marker.pose.position.y = h_GMM.position.y
+            marker.pose.position.z = 0
+            quaternion = tf.quaternion_from_euler(0.0, 0.0, h_pose)
+            #rospy.logwarn("h_pose:%.4f", h_pose)
+            marker.pose.orientation.x = quaternion[0]
+            marker.pose.orientation.y = quaternion[1]
+            marker.pose.orientation.z = quaternion[2]
+            marker.pose.orientation.w = quaternion[3]
+            marker.scale.x = 2 * math.sqrt(2 * h_GMM.delta_x * h_GMM.delta_y * math.log(2))
+            marker.scale.y = 2 * math.sqrt(2 * h_GMM.delta_y * h_GMM.delta_y * math.log(2))
+            marker.scale.z = 0.01
+            marker.color.a = 0.5
+            marker.color.r = 1.0  
+            marker.color.g = 0.0
+            marker.color.b = 0.0
+            GMM_markerarray.markers.append(marker)
+
+            marker = Marker()
+            marker.header.frame_id = "base_footprint"
+            marker.header.stamp = rospy.Time.now()
+            marker.ns = "circle"
+            marker.id = marker_id + 30
+            marker.type = Marker.SPHERE
+            marker.action = Marker.ADD
+            marker.pose.position.x = h_GMM.position.x
+            marker.pose.position.y = h_GMM.position.y
+            marker.pose.position.z = 0
+            marker.pose.orientation.x = 0.0
+            marker.pose.orientation.y = 0.0
+            marker.pose.orientation.z = 0.0
+            marker.pose.orientation.w = 1.0
+            marker.scale.x = 2 * math.sqrt(2 * h_GMM.delta_y * h_GMM.delta_y * math.log(2))
+            marker.scale.y = 2 * math.sqrt(2 * h_GMM.delta_y * h_GMM.delta_y * math.log(2))
+            marker.scale.z = 0.01
+            marker.color.a = 0.5
+            marker.color.r = 0.0
+            marker.color.g = 0.0
+            marker.color.b = 1.0
+            GMM_markerarray.markers.append(marker)
+            marker_id += 1
+
+        self._GMM_pub.publish(GMM_markerarray)
         rospy.logwarn("GMM punish: %.4f", reward)
         return reward
 
@@ -1535,7 +1700,7 @@ class DRLNavEnv(gym.Env):
         """
         # updata the number of iterations:
         self.num_iterations += 1
-        rospy.logwarn("\nnum_iterations = {}".format(self.num_iterations))
+        #rospy.logwarn("\nnum_iterations = {}".format(self.num_iterations))
 
         # 1) Goal reached?
         # distance to goal:
@@ -1546,7 +1711,7 @@ class DRLNavEnv(gym.Env):
             self.curr_pose.position.z - self.goal_position.z
             ])
         )
-        if(dist_to_goal <= self.GOAL_RADIUS):
+        if(dist_to_goal <= self.GOAL_RADIUS + 0.2):
             # reset the robot velocity to 0:
             self._cmd_vel_pub.publish(Twist())
             self._episode_done = True
