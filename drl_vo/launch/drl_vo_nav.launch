@@ -1,35 +1,48 @@
 <launch>
-  <!-- <arg name="scene_file" default="$(find pedsim_simulator)/scenarios/eng_hall.xml"/> -->
+  <arg name="scene_file" default="$(find pedsim_simulator)/scenarios/lobby/eng_hall_35_new.xml"/>
   <!-- <arg name="scene_file" default="$(find pedsim_simulator)/scenarios/autolab/autolab_35_v1.xml"/> -->
-  <arg name="scene_file" default="$(find pedsim_simulator)/scenarios/cumberland/cumberland_25.xml"/>
-  <!-- <arg name="scene_file" default="$(find pedsim_simulator)/scenarios/freiburg/freiburg_25.xml"/> -->
+  <!-- <arg name="scene_file" default="$(find pedsim_simulator)/scenarios/cumberland/cumberland_35.xml"/> -->
+  <!-- <arg name="scene_file" default="$(find pedsim_simulator)/scenarios/freiburg/freiburg_35.xml"/> -->
+  <!-- <arg name="scene_file" default="$(find pedsim_simulator)/scenarios/nav_test.xml"/> -->
   <!-- <arg name="scene_file" default="$(find pedsim_simulator)/scenarios/T-hallway.xml"/> -->
   <!-- <arg name="scene_file" default="$(find pedsim_simulator)/scenarios/Hallway_with_obs.xml"/> -->
   <!-- <arg name="scene_file" default="$(find pedsim_simulator)/scenarios/circle_hallway.xml"/> -->
-  <!-- <arg name="world_name" default="$(find pedsim_gazebo_plugin)/worlds/eng_hall.world"/> -->
+  <arg name="world_name" default="$(find pedsim_gazebo_plugin)/worlds/eng_hall.world"/>
   <!-- <arg name="world_name" default="$(find pedsim_gazebo_plugin)/worlds/autolab.world"/> -->
-  <arg name="world_name" default="$(find pedsim_gazebo_plugin)/worlds/cumberland.world"/>
+  <!-- <arg name="world_name" default="$(find pedsim_gazebo_plugin)/worlds/cumberland.world"/> -->
   <!-- <arg name="world_name" default="$(find pedsim_gazebo_plugin)/worlds/freiburg.world"/> -->
   <!-- <arg name="world_name" default="$(find pedsim_gazebo_plugin)/worlds/hallway.world"/>   -->
   <!-- <arg name="world_name" default="$(find pedsim_gazebo_plugin)/worlds/Hallway_with_obs.world"/> -->
   <!-- <arg name="world_name" default="$(find pedsim_gazebo_plugin)/worlds/T-hallway.world"/> -->
+  <!-- <arg name="world_name" default="$(find pedsim_gazebo_plugin)/worlds/nav_test.world"/> -->
   <arg name="gui" default="true" doc="Bring up the Gazebo graphical interface"/>
-  <!-- <arg name="pose_initial_x" default="1.0"/>  -->
-  <!-- <arg name="pose_initial_y" default="0.0"/> -->
-  <arg name="pose_initial_x" default="10.0"/> 
-  <arg name="pose_initial_y" default="10.0"/>  
-  <!-- <arg name="map_file" default="$(find robot_gazebo)/maps/gazebo_eng_lobby/gazebo_eng_lobby.yaml"/> -->
+  <arg name="pose_initial_x" default="1.0"/> 
+  <arg name="pose_initial_y" default="1.0"/>
+  
+  <!-- <arg name="pose_initial_x" default="9.0"/> 
+  <arg name="pose_initial_y" default="10.0"/> -->
+  <!-- except lobby -->  
+  <!-- <arg name="pose_initial_x" default="21.0"/> 
+  <arg name="pose_initial_y" default="10.0"/> -->
+  <arg name="map_file" default="$(find robot_gazebo)/maps/gazebo_eng_lobby/gazebo_eng_lobby.yaml"/>
   <!-- <arg name="map_file" default="$(find robot_gazebo)/maps/gazebo_autolab/gazebo_autolab.yaml"/> -->
-  <arg name="map_file" default="$(find robot_gazebo)/maps/gazebo_cumberland/gazebo_cumberland.yaml"/>
+  <!-- <arg name="map_file" default="$(find robot_gazebo)/maps/gazebo_cumberland/gazebo_cumberland.yaml"/> -->
   <!-- <arg name="map_file" default="$(find robot_gazebo)/maps/gazebo_frieburg/gazebo_frieburg.yaml"/> -->
   <!-- <arg name="map_file" default="$(find robot_gazebo)/maps/hallway/hallway.yaml"/> -->
   <!-- <arg name="map_file" default="$(find robot_gazebo)/maps/hallway_with_obs/hallway_with_obs.yaml"/> -->
   <!-- <arg name="map_file" default="$(find robot_gazebo)/maps/T-hallway/T_hallway.yaml"/> -->
-  <!-- <arg name="initial_pose_x" default="1.0"/> -->
-  <!-- <arg name="initial_pose_y" default="0.0"/> -->
-  <arg name="initial_pose_x" default="8.5"/>
-  <arg name="initial_pose_y" default="2.0"/>
-  <arg name="initial_pose_a" default="0.0"/>
+  <!-- <arg name="map_file" default="$(find robot_gazebo)/maps/gazebo_new_world/gazebo_new_world.yaml"/> -->
+  <arg name="initial_pose_x" default="1.0"/>
+  <arg name="initial_pose_y" default="0.0"/>
+  <arg name="initial_pose_a" default="0.13"/>
+  <!-- freiburg -->
+  <!-- <arg name="initial_pose_x" default="18.0"/>
+  <arg name="initial_pose_y" default="-7.0"/>
+  <arg name="initial_pose_a" default="0.0"/> -->
+  <!-- square -->
+  <!-- <arg name="initial_pose_x" default="20.0"/>
+  <arg name="initial_pose_y" default="9.0"/>
+  <arg name="initial_pose_a" default="0.0"/>  -->
   <arg name="model_file" default="/home/lab423/drl_GMM_runs_configuration2/best_model.zip"/>
   <!-- <arg name="model_file" default="/home/lab423/drlvo_ws/src/drl_vo_nav/drl_vo/src/model/drl_vo.zip"/> -->
   <!-- <arg name="~log_dir" value="/home/lab423/drl_GMM_runs5"/>   -->
@@ -55,6 +68,14 @@
     <arg name="initial_pose_y" value="$(arg initial_pose_y)"/>
     <arg name="initial_pose_a" value="$(arg initial_pose_a)"/>
   </include>
+  <!-- <include file="$(find turtlebot_gazebo)/launch/amcl_demo.launch">
+    <arg name="map_file" value="$(arg map_file)"/>
+    <arg name="initial_pose_x" value="$(arg initial_pose_x)"/>
+    <arg name="initial_pose_y" value="$(arg initial_pose_y)"/>
+    <arg name="initial_pose_a" value="$(arg initial_pose_a)"/>
+  </include> -->
+
+  <!-- <include file="$(find turtlebot_navigation)/launch/includes/move_base.launch.xml"/> -->
 
   <!-- CNN DATA -->
   <include file="$(find drl_vo_nav)/launch/nav_cnn_data.launch"/>
@@ -65,6 +86,7 @@
     <!-- <arg name="~log_dir" value="$(arg ~log_dir)"/> -->
   </include>
 
+  <!-- <node name="nvblox_process" pkg="drl_vo_nav" type="nvblox_process.py"/> -->
 
   <!-- Rviz -->
   <include file="$(find robot_gazebo)/launch/view_navigation.launch" if="$(arg rviz)"/>

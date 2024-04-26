@@ -15,7 +15,7 @@ from gazebo_msgs.srv import GetModelState, SetModelState
 class nav_test:
   def __init__(self):
      self.ROBOT_RADIUS = 0.3
-     self.NAV_TIME = 27 #35
+     self.NAV_TIME = 22 #35
      self.curr_pose = Pose()
      self.map = OccupancyGrid()
      self.goal_position = Point()
@@ -33,6 +33,10 @@ class nav_test:
      self.collision_nums = 0
      self.collision_current = 0
      self.collision_rate = 0
+
+     self.collision_ped_nums = 0
+     self.collision_ped_current = 0
+     self.collision_ped_rate = 0
      
      self.nav_times = 0
      self.time_start = 0
@@ -73,10 +77,11 @@ class nav_test:
           rospy.logwarn("number %d", self.nav_nums)
           if self.nav_nums > 25:
               self.nav_nums = 25
-              rospy.logwarn("nav_nums:%d, sucess_rate:%.2f, collision_nums:%.2f,\
+              rospy.logwarn("nav_nums:%d, sucess_rate:%.2f, collision_nums:%.2f, collsion_ped: %.2f,\
                             nav_times:%.2f, intrusion_nums:%.2f, intrusion_times:%.2f,\
                             trajectory_length: %.2f", self.nav_nums, self.success_nums/self.nav_nums,\
-                              self.collision_nums/self.success_nums, self.nav_times/self.success_nums,\
+                              self.collision_nums/self.success_nums, self.collision_ped_nums, 
+                              self.nav_times/self.success_nums,\
                               self.intrusion_nums/self.success_nums, self.intrusion_times/self.success_nums,\
                               self.trajectory_length/self.success_nums)
           self.nav_flag = True
@@ -89,23 +94,26 @@ class nav_test:
           self.nav_flag = False
           self.trajectory_length_current = 0
           self.collision_current = 0
+          self.collision_rate = 0
           self.intrusion_nums_current = 0
           self.intrusion_times_current = 0
+          self.collision_ped_current = 0
           self.intrusion_in_flag = False
           self.intrusion_out_flag = False
           #reset robot
           # self._pub_initial_model_state(1, 1, 0)
-          self._pub_initial_model_state(10, 10, 0)
-          time.sleep(1)
-          '''
-          # reset robot odometry:
-          timer = time.time()
-          while time.time() - timer < 0.5:
-              self._reset_odom_pub.publish(Empty())
-          '''
-          # reset robot inital pose in rviz:
-          # self._pub_initial_position(1, 0, 0)
-          self._pub_initial_position(8.5, 2, 0)
+          # self._pub_initial_model_state(10, 10, 0)
+          # time.sleep(3)
+          # '''
+          # # reset robot odometry:
+          # timer = time.time()
+          # while time.time() - timer < 0.5:
+          #     self._reset_odom_pub.publish(Empty())
+          # '''
+          # # reset robot inital pose in rviz:
+          # self._pub_initial_position(1.5, 0, 0)
+          # # self._pub_initial_position(10, 10, 0)
+          # time.sleep(3)
       dist_to_goal = np.linalg.norm(
           np.array([
           self.curr_pose.position.x - self.goal_position.x,
@@ -124,6 +132,8 @@ class nav_test:
             self.trajectory_length_current = 0
             self.collision_nums += self.collision_current
             self.collision_current = 0
+            self.collision_ped_nums += self.collision_ped_current
+            self.collision_ped_current = 0
             self.intrusion_nums += self.intrusion_nums_current
             self.intrusion_nums_current = 0
             self.intrusion_times += self.intrusion_times_current
@@ -152,7 +162,6 @@ class nav_test:
           # calculate the radius of group
           max_radius = -np.Infinity
           for index in group.track_ids:
-              
               ped_i = self.peds.tracks[index - 1]
               h_position = Point()
               h_position.x = ped_i.pose.pose.position.x
@@ -161,6 +170,8 @@ class nav_test:
                                     pow(h_position.y-center.y, 2))
               if radius_i > max_radius:
                   max_radius = radius_i
+          if max_radius > 1.5:
+              max_radius = 1.5
           dist_to_intrude = np.linalg.norm(
               np.array([
               0 - center.x,
@@ -172,6 +183,7 @@ class nav_test:
               self.intrusion_in_flag = True
               self.intrusion_group_id = id
               self.intrusion_timer_start = rospy.Time.now()
+              rospy.logwarn("an intrusion happenning") 
           if  id==self.intrusion_group_id and self.intrusion_in_flag == True and dist_to_intrude > max_radius:
               self.intrusion_out_flag = True
               if self.intrusion_in_flag == True and self.intrusion_out_flag == True:
@@ -181,7 +193,23 @@ class nav_test:
                   self.intrusion_in_flag = False
                   self.intrusion_out_flag = False  
                   rospy.logwarn("an intrusion just happened") 
-                  rospy.logwarn("intrusion_time: %.2f", self.intrusion_times_current)     
+                  rospy.logwarn("intrusion_time: %.2f", self.intrusion_times_current)   
+      # for ped_i in self.peds.tracks:
+      #   #rospy.logwarn("%d", ped_i.track_id)
+      #   #get the position and pose of human_i
+      #   h_position = Point()
+      #   h_position.x = ped_i.pose.pose.position.x 
+      #   h_position.y = ped_i.pose.pose.position.y   
+      #   dist_to_ped = np.linalg.norm(
+      #   np.array([
+      #   0 - h_position.x,
+      #   0 - h_position.y,
+      #   ])
+      #   )  
+      #   if dist_to_ped <= self.ROBOT_RADIUS+0.2:
+      #       self.collision_ped_current += 1
+      #       rospy.logwarn("collision with ped")
+            
 
   def _scan_callback(self, scan_msg):
       scan = scan_msg

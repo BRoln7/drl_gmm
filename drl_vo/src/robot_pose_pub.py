@@ -20,7 +20,7 @@ def robot_pose_pub():
     rospy.init_node('robot_pose', anonymous=True)
     tf_listener = tf.TransformListener()
     robot_pose_pub = rospy.Publisher('/robot_pose', PoseStamped, queue_size=10)
-    #cadrl_pose_pub = rospy.Publisher('/pose', PoseStamped, queue_size=10)
+    cadrl_pose_pub = rospy.Publisher('/pose', PoseStamped, queue_size=10)
     rate = rospy.Rate(30) # 10hz
     while not rospy.is_shutdown():
         trans = rot = None
@@ -43,7 +43,7 @@ def robot_pose_pub():
         rob_pos.pose.orientation.z = rot[2]
         rob_pos.pose.orientation.w = rot[3]
         robot_pose_pub.publish(rob_pos)
-        #cadrl_pose_pub.publish(rob_pos)
+        # cadrl_pose_pub.publish(rob_pos)
 
         rate.sleep()
 

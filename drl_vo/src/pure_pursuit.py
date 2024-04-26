@@ -272,7 +272,7 @@ class PurePursuit:
         cnn_goal.z = 0
         if not np.isnan(cnn_goal.x) and not np.isnan(cnn_goal.y): # ensure data is valid
                 self.cnn_goal_pub.publish(cnn_goal)
-                #self.cadrl_goal_pub.publish(cnn_goal)
+                # self.cadrl_goal_pub.publish(cnn_goal)
 
 
         # publish the final goal:
@@ -282,7 +282,7 @@ class PurePursuit:
         final_goal.z = yaw
         if not np.isnan(final_goal.x) and not np.isnan(final_goal.y): # ensure data is valid
                 self.final_goal_pub.publish(final_goal)
-                #self.cadrl_goal_pub.publish(final_goal)
+                # self.cadrl_goal_pub.publish(final_goal)
 
 if __name__ == '__main__':
     try:

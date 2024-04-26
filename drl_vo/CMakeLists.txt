@@ -10,7 +10,9 @@ project(drl_vo_nav)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
+  pcl_ros
 )
+
 #add_executable(start_learning scripts/start_learning.py)
 
 ## System dependencies are found with CMake's conventions
@@ -118,6 +120,8 @@ catkin_package(
 include_directories(
 # include
  ${catkin_INCLUDE_DIRS}
+ ${PCL_INCLUDE_DIRS}
+ ${PCL_LIBRARY_DIRS}
 )
 
 ## Declare a C++ library
@@ -134,6 +138,8 @@ include_directories(
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/cablearning_node.cpp)
+# add_executable(nvblox_process_node src/nvblox_process.cpp)
+# target_link_libraries(nvblox_process_node ${catkin_LIBRARIES})
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
