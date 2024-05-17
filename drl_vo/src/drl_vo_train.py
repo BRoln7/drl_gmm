@@ -118,7 +118,7 @@ policy_kwargs = dict(
 
 # continue training:
 kwargs = {'tensorboard_log':log_dir, 'verbose':2, 'n_epochs':10, 'n_steps':512, 'batch_size':128,'learning_rate':5e-5}
-model_file = rospy.get_param('~model_file', )#"/home/lab423/drl_GMM_Hallway_no_collision_runs/best_model.zip")
+model_file = rospy.get_param('~model_file', "./model/drl_pre_train.zip")
 model = PPO.load(model_file, env=env, **kwargs)
 
 # Create the callback: check every 1000 steps

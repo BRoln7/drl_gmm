@@ -64,7 +64,7 @@ class PurePursuit:
         self.tf_listener = tf.TransformListener()
         #self.cmd_vel_pub = rospy.Publisher('cmd_vel', Twist, queue_size=10)
         self.cnn_goal_pub = rospy.Publisher('cnn_goal', Point, queue_size=1)#, latch=True)
-        self.cadrl_goal_pub = rospy.Publisher('move_base_simple/goal', PoseStamped, queue_size=1)
+        # self.cadrl_goal_pub = rospy.Publisher('move_base_simple/goal', PoseStamped, queue_size=1)
         self.final_goal_pub = rospy.Publisher('final_goal', Point, queue_size=1)#, latch=True)
     
     # Callback function for the path subscriber
@@ -89,7 +89,7 @@ class PurePursuit:
         trans = rot = None
         # look up the current pose of the base_footprint using the tf tree
         try:
-            (trans,rot) = self.tf_listener.lookupTransform('/map', '/base_footprint', rospy.Time(0))
+            (trans,rot) = self.tf_listener.lookupTransform('/map', '/base_link', rospy.Time(0))
         except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
             rospy.logwarn('Could not get robot pose')
             return (np.array([np.nan, np.nan]), np.nan)
@@ -224,7 +224,7 @@ class PurePursuit:
             trans = rot = None
             # look up the current pose of the base_footprint using the tf tree
             try:
-                (trans,rot) = self.tf_listener.lookupTransform('/map', '/base_footprint', rospy.Time(0))
+                (trans,rot) = self.tf_listener.lookupTransform('/map', '/base_link', rospy.Time(0))
             except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
                 rospy.logwarn('Could not get robot pose')
                 return (np.array([np.nan, np.nan]), np.nan)

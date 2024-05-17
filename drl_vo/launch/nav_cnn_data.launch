@@ -2,6 +2,7 @@
   <!-- Subgoal Publisher -->
   <node name="pure_pursuit" pkg="drl_vo_nav" type="pure_pursuit.py" output="screen" required="true">
     <remap from="path" to="move_base/NavfnROS/plan"/>
+    <!-- <remap from="path" to="/move_base/GlobalPlanner/plan"/> -->
     <param name="rate"  type="double" value="20"  />
   </node>
 
@@ -12,9 +13,9 @@
   <node name="robot_pose_pub" pkg="drl_vo_nav" type="robot_pose_pub.py"/>
 
   <!-- Robot velocity Publisher -->
-  <node name="cadrl_robot_info_pub" pkg="drl_vo_nav" type="cadrl_robot_info_pub.py">
+  <!-- <node name="cadrl_robot_info_pub" pkg="drl_vo_nav" type="cadrl_robot_info_pub.py">
     <remap from="~velocity" to="velocity"/>
-  </node>
+  </node> -->
 
   <!-- Pedestrian Publisher -->
   <node name="track_ped_pub" pkg="drl_vo_nav" type="track_ped_pub.py" output="screen"/>

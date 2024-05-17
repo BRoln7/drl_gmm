@@ -54,7 +54,7 @@ class DRLNavEnv(gym.Env):
         self.seed()
 
         # robot parameters:
-        self.ROBOT_RADIUS = 0.3
+        self.ROBOT_RADIUS = 0.4
         self.GOAL_RADIUS = 0.5 #0.3
         self.DIST_NUM = 10
         self.pos_valid_flag = True
@@ -67,7 +67,7 @@ class DRLNavEnv(gym.Env):
 
         # action limits
         self.max_linear_speed = 0.5
-        self.max_angular_speed = 2
+        self.max_angular_speed = 0.4
         # observation limits
         # action space
         # self.high_action = np.array([self.max_linear_speed, self.max_angular_speed])
@@ -83,6 +83,9 @@ class DRLNavEnv(gym.Env):
         self.scan = []
         self.goal = []
         self.sub_goal = Point()
+        self.drl_cmd_vel = Twist()
+        self.drl_cmd_last_vel = Twist()
+        self.cmd_list = []
         #self.vel = []
        
         # self.observation_space = spaces.Box(low=-30, high=30, shape=(6402,), dtype=np.float32)
@@ -92,6 +95,8 @@ class DRLNavEnv(gym.Env):
         self.init_pose = Pose()
         self.curr_pose = Pose()
         self.curr_vel = Twist()
+        self.vel_list = []
+        self.last_vel = Twist()
         self.goal_position = Point()
         self.info = {}
         # episode done flag:
@@ -123,6 +128,7 @@ class DRLNavEnv(gym.Env):
         self._robot_vel_sub = rospy.Subscriber('/odom', Odometry, self._robot_vel_callback) #, queue_size=1)
         self._final_goal_sub = rospy.Subscriber("/move_base/current_goal", PoseStamped, self._final_goal_callback) #, queue_size=1)
         self._goal_status_sub = rospy.Subscriber("/move_base/status", GoalStatusArray, self._goal_status_callback) #, queue_size=1)
+        self._drl_cmd_vel_sub = rospy.Subscriber("teleop_velocity_smoother/raw_cmd_vel", Twist, self._drlcmdvel_callback)
         # self._model_states_sub = rospy.Subscriber("/gazebo/model_states", ModelStates, self._model_states_callback, queue_size=1)
         # self._bumper_sub = rospy.Subscriber("/mobile_base/events/bumper", BumperEvent, self._bumper_callback) #, queue_size=1)
         # self._dwa_vel_sub = rospy.Subscriber('/move_base/cmd_vel', Twist, self._dwa_vel_callback)
@@ -660,6 +666,13 @@ class DRLNavEnv(gym.Env):
         :return:
         """
         self.curr_vel = robot_vel_msg.twist.twist
+        if len(self.vel_list) > 2:
+            self.last_vel = self.vel_list[-2]
+        self.vel_list.append(self.curr_vel)
+        if len(self.vel_list) > 5:
+            self.vel_list.pop(0)
+        # rospy.logwarn("Current Velocity: \ncurr_vel = {}".format(self.curr_vel.angular.z))
+        # rospy.logwarn("Last Velocity: \nlast_vel = {}".format(self.last_vel.angular.z))
 
     # Callback function for the final goal subscriber
     def _final_goal_callback(self, final_goal_msg):
@@ -724,6 +737,14 @@ class DRLNavEnv(gym.Env):
     def _sub_goal_callback(self, subGoal_msg):
         self.sub_goal = subGoal_msg
 
+    def _drlcmdvel_callback(self, drlcmdvel_msg):
+        self.drl_cmd_vel = drlcmdvel_msg
+        self.cmd_list.append(self.drl_cmd_vel)
+        if len(self.cmd_list) > 2:
+            self.drl_cmd_last_vel = self.cmd_list[-2]
+        if len(self.cmd_list) > 10:
+            self.cmd_list.pop(0)
+        rospy.logwarn("drlcmdvel_lastz:%.4f, drlcmdvel_z%.4f", self.drl_cmd_last_vel.angular.z, self.drl_cmd_vel.angular.z)
     # ----------------------------
 
     # Publisher functions to publish data
@@ -951,8 +972,8 @@ class DRLNavEnv(gym.Env):
         # MaxAbsScaler:
         vx_min = 0
         vx_max = 0.5
-        vz_min = -2 #-3
-        vz_max = 2 #3
+        vz_min = 0.4 #-2 #-3
+        vz_max = 0.4 #2 #3
         cmd_vel.linear.x = (action[0] + 1) * (vx_max - vx_min) / 2 + vx_min
         cmd_vel.angular.z = (action[1] + 1) * (vz_max - vz_min) / 2 + vz_min
         #self._check_publishers_connection()
@@ -964,7 +985,7 @@ class DRLNavEnv(gym.Env):
             rate.sleep()
     
         # self._cmd_vel_pub.publish(cmd_vel)
-        rospy.logwarn("cmd_vel: \nlinear: {}\nangular: {}".format(cmd_vel.linear.x, cmd_vel.angular.z))
+        # rospy.logwarn("cmd_vel: \nlinear: {}\nangular: {}".format(cmd_vel.linear.x, cmd_vel.angular.z))
 
     # Compute Reward Section:
     # -------------------------------
@@ -977,23 +998,26 @@ class DRLNavEnv(gym.Env):
         r_collision = -20 #-15
         r_scan = -0.2 #-0.15 #-0.3
         r_angle = 0.6 #0.5 #1 #0.8 #1 #0.5
-        r_rotation = -0.1 #-0.15 #-0.4 #-0.5 #-0.2 # 0.1
+        r_rotation = -0.05 #-0.15 #-0.4 #-0.5 #-0.2 # 0.1
+        r_shake = -0.05
 
         angle_thresh = np.pi/6
-        w_thresh = 1 # 0.7
+        w_thresh = 0.3 # 0.7
+        shake_thresh = 0.15
 
         # reward parts:
         r_g = self._goal_reached_reward(r_arrival, r_waypoint)
         #r_g = self._goal_reached_dz_reward()
         # r_c = self._obstacle_collision_dz_punish(self.lidar_data, -0.05, -1.0)
         #r_c = self._obstacle_collision_punish(self.cnn_data.scan[-720:], r_scan, r_collision)
-        #r_w = self._angular_velocity_punish(self.curr_vel.angular.z,  r_rotation, w_thresh)
+        r_w = self._angular_velocity_punish(self.drl_cmd_vel.angular.z, r_rotation, w_thresh)
+        r_s = self._angular_shake_punish(self.drl_cmd_vel.angular.z, self.drl_cmd_last_vel.angular.z, r_shake, shake_thresh)
         #r_t = self._theta_reward(self.goal, self.mht_peds, self.curr_vel.linear.x, r_angle, angle_thresh)
         #r_d = self._danger_zone_punish(self.mht_peds, 0.75, 0.35)
         r_n = self._GMM_punish(self.groups, self.mht_peds, -1.0)
-        #r_s = self._social_norm_punish(self.groups, self.mht_peds, -1)
-        reward = r_g + r_n #+ r_c #+ r_d #r_w + r_d  #+ r_t#+ r_v # + r_p
-        #rospy.logwarn("Current Velocity: \ncurr_vel = {}".format(self.curr_vel.linear.x))
+        reward = r_g + r_n + r_w + r_s #+ r_c #+ r_d #r_w + r_d  #+ r_t#+ r_v # + r_p
+        rospy.logwarn("Current Velocity: curr_vel = {}".format(self.drl_cmd_vel.angular.z))
+        rospy.logwarn("Last Velocity: last_vel = {}".format(self.drl_cmd_last_vel.angular.z))
         #rospy.logwarn("Compute reward done. \nreward = {}".format(reward))
         return reward
 
@@ -1090,7 +1114,7 @@ class DRLNavEnv(gym.Env):
         return reward
     
 
-    def _angular_velocity_punish(self, w_z,  r_rotation, w_thresh):
+    def _angular_velocity_punish(self, w_z, r_rotation, w_thresh):
         """
         Returns negative reward if the robot turns.
         :param w roatational speed of the robot
@@ -1099,11 +1123,20 @@ class DRLNavEnv(gym.Env):
         :return: returns reward for turning
         """
         if(abs(w_z) > w_thresh):
-            reward = abs(w_z) * r_rotation
+            reward = -abs(w_z * r_rotation)
         else:
             reward = 0.0
 
-        #rospy.logwarn("Angular velocity punish reward: {}".format(reward))
+        rospy.logwarn("rotation punish: %.5f", reward)
+        return reward
+
+    def _angular_shake_punish(self, current_wz, last_wz, r_shake, shake_thresh):
+        if(abs(current_wz - last_wz) > shake_thresh):
+            reward = abs(current_wz - last_wz) * r_shake
+        else:
+            reward = 0.0
+
+        rospy.logwarn("shake punish reward: {}".format(reward))
         return reward
 
     def _theta_reward(self, goal, mht_peds, v_x, r_angle, angle_thresh):

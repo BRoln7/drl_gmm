@@ -84,7 +84,7 @@ class CnnData:
     def scan_callback(self, laserScan_msg):
         # get the laser scan data:
         try:
-          (trans, rot) = self.listener.lookupTransform('base_footprint', 'hokuyo_link', rospy.Time(0))
+          (trans, rot) = self.listener.lookupTransform('base_link', 'sensor_ray', rospy.Time(0))
           # Construct transformation matrix
           trans_matrix = translation_matrix(trans)
           rot_matrix = quaternion_matrix(rot)
@@ -101,7 +101,7 @@ class CnnData:
                   transformed_ranges.append(np.linalg.norm(transformed_point))
 
           transformed_scan_msg = LaserScan()
-          transformed_scan_msg.header.frame_id = "base_footprint"
+          transformed_scan_msg.header.frame_id = "base_link"
           transformed_scan_msg.header.stamp = rospy.Time.now()
           transformed_scan_msg.angle_increment = laserScan_msg.angle_increment
           transformed_scan_msg.time_increment = laserScan_msg.time_increment
@@ -121,8 +121,6 @@ class CnnData:
         scan_data[np.isinf(scan_data)] = 0.
         self.scan_tmp = scan_data[180:900]
         self.scan_all_tmp = scan_data
-
-
 
     # Callback function for the current goal subscriber
     def goal_callback(self, goal_msg):
