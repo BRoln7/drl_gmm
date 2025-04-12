@@ -1,8 +1,6 @@
 # DRL-GMM: drl-based robot crowd navigation with Gaussian mixture model
 
-Implementation code of my bachelor's thesis. This project is inspired by paper ["DRL-VO: Learning to Navigate Through Crowded Dynamic Scenes Using Velocity Obstacles"](
-https://doi.org/10.1109/TRO.2023.3257549
-)([arXiv](https://arxiv.org/pdf/2301.06512.pdf)) in IEEE Transactions on Robotics (T-RO) 2023. I reproduced their work and modified the reward function with Gaussian mixture model.
+Implementation code of my bachelor's thesis. This project is inspired by paper ["DRL-VO: Learning to Navigate Through Crowded Dynamic Scenes Using Velocity Obstacles"](https://doi.org/10.1109/TRO.2023.3257549)([arXiv](https://arxiv.org/pdf/2301.06512.pdf)) in IEEE Transactions on Robotics (T-RO) 2023. I reproduced their work and modified the reward function with Gaussian mixture model from paper ["Human-Aware Path Planning With Improved Virtual Doppler Method in Highly Dynamic Environments"](https://ieeexplore.ieee.org/abstract/document/9779321) in IEEE Transactions on Automation Science and Engineering(T-ASE).
 * Reward:
 ![gmm](demos/gmm.png "gmm")
 * Real world:
