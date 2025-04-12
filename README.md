@@ -5,8 +5,6 @@ https://doi.org/10.1109/TRO.2023.3257549
 )([arXiv](https://arxiv.org/pdf/2301.06512.pdf)) in IEEE Transactions on Robotics (T-RO) 2023. I reproduced their work and modified the reward function with Gaussian mixture model.
 * Reward:
 ![gmm](demos/gmm.png "gmm")
-* Simulation:
-![simulation_demo](demos/1.simulation_demo.gif "simulation_demo") 
 * Real world:
 ![hardware_demo](demos/4.real-world_experiment.gif "hardware_demo") 
 
